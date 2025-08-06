@@ -1,0 +1,32 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ButtonDownloadRecoveryKeyPDF renders button as expected 1`] = `
+<div>
+  <span
+    data-testid="ftlmsg-mock"
+    id="recovery-key-download-button-v3"
+  >
+    <button
+      class="cta-primary cta-xl cta-primary cta-xl w-full mt-4"
+    >
+      Download and continue
+    </button>
+  </span>
+</div>
+`;
+
+exports[`getFilename function renders button with CMS passed through 1`] = `
+<div>
+  <span
+    data-testid="ftlmsg-mock"
+    id="recovery-key-download-button-v3"
+  >
+    <button
+      class="cta-primary-cms cta-xl cta-primary cta-xl w-full mt-4"
+      style="--cta-bg: #000000; --cta-border: #000000; --cta-active: #000000; --cta-disabled: #00000060;"
+    >
+      Download and continue
+    </button>
+  </span>
+</div>
+`;

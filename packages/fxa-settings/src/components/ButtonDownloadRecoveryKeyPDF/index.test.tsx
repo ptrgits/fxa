@@ -9,6 +9,7 @@ import { ButtonDownloadRecoveryKeyPDF, getFilename } from '.';
 import { logViewEvent } from '../../lib/metrics';
 import { TextEncoder } from 'util';
 import { MOCK_EMAIL } from '../../pages/mocks';
+import { RelierCmsInfo } from '../../models';
 
 Object.assign(global, { TextEncoder });
 
@@ -34,13 +35,14 @@ beforeAll(() => {
 
 describe('ButtonDownloadRecoveryKeyPDF', () => {
   it('renders button as expected', () => {
-    renderWithLocalizationProvider(
+    const { container } = renderWithLocalizationProvider(
       <ButtonDownloadRecoveryKeyPDF
         {...{ recoveryKeyValue, viewName }}
         email={MOCK_EMAIL}
       />
     );
     screen.getByText('Download and continue');
+    expect(container).toMatchSnapshot();
   });
 
   // Content of downloaded file is tested in Playwright tests
@@ -101,5 +103,27 @@ describe('getFilename function', () => {
     // filename still contains full prefix and date
     expect(filename).toContain('Mozilla-Recovery-Key');
     expect(filename).toContain(date);
+  });
+
+  it('renders button with CMS passed through', () => {
+    const cmsInfo: RelierCmsInfo = {
+      // Only `shared` prop is need for test,
+      // but these are required props of `RelierCmsInfo`
+      name: 'SNAPSHOT cms button',
+      clientId: 'SNAPSHOT_CLIENT_ID',
+      entrypoint: 'SNAPSHOT_ENTRYPOINT',
+      shared: {
+        buttonColor: '#000000',
+        logoUrl: 'https://example.com/SNAPSHOT-logo.png',
+        logoAltText: 'SNAPSHOT logo'
+      }
+    }
+    const { container } = renderWithLocalizationProvider(
+      <ButtonDownloadRecoveryKeyPDF
+        {...{ recoveryKeyValue, viewName, cmsInfo }}
+        email={MOCK_EMAIL}
+      />
+    );
+    expect(container).toMatchSnapshot();
   });
 });

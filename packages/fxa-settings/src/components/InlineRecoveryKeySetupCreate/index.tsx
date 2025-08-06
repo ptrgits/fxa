@@ -11,15 +11,17 @@ import { RelierCmsInfo, useFtlMsgResolver } from '../../models';
 import { HeadingPrimary } from '../HeadingPrimary';
 import CmsButtonWithFallback from '../CmsButtonWithFallback';
 
+export interface InlineRecoveryKeySetupCreateProps {
+  createRecoveryKeyHandler: () => Promise<CreateRecoveryKeyHandler>;
+  doLaterHandler: () => void;
+  cmsInfo?: RelierCmsInfo;
+}
+
 export const InlineRecoveryKeySetupCreate = ({
   createRecoveryKeyHandler,
   doLaterHandler,
   cmsInfo
-}: {
-  createRecoveryKeyHandler: () => Promise<CreateRecoveryKeyHandler>;
-  doLaterHandler: () => void;
-  cmsInfo?: RelierCmsInfo
-}) => {
+}: InlineRecoveryKeySetupCreateProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [localizedErrorBannerMessage, setLocalizedErrorBannerMessage] =
     useState('');
