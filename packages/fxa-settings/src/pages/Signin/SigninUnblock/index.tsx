@@ -24,10 +24,7 @@ import { SigninUnblockProps } from './interfaces';
 import { EmailCodeImage } from '../../../components/images';
 import { AuthUiErrors } from '../../../lib/auth-errors/auth-errors';
 import GleanMetrics from '../../../lib/glean';
-import {
-  StoredAccountData,
-  storeAccountData,
-} from '../../../lib/storage-utils';
+import { StoredAccountData, setCurrentAccount } from '../../../lib/cache';
 import { handleNavigation } from '../utils';
 import { ResendStatus } from '../../../lib/types';
 import { getLocalizedErrorMessage } from '../../../lib/error-utils';
@@ -132,7 +129,7 @@ export const SigninUnblock = ({
         metricsEnabled: data.signIn.metricsEnabled,
       };
 
-      storeAccountData(accountData);
+      setCurrentAccount(accountData);
 
       const navigationOptions = {
         email,

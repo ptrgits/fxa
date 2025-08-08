@@ -94,7 +94,8 @@ export function mockSession(
   const session = {
     verified,
     token: 'deadc0de',
-  } as Session;
+  } as unknown as Session;
+
   if (typeof jest !== 'undefined') {
     session.destroy = isError
       ? jest.fn().mockRejectedValue(new Error())

@@ -5,7 +5,7 @@ import { errorHandler } from './gql';
 import { ErrorResponse } from '@apollo/client/link/error';
 import { Operation, NextLink, ServerError } from '@apollo/client/core';
 import { GraphQLError } from 'graphql';
-import { cache } from './cache';
+import { apolloMemCache } from './cache';
 import { GET_LOCAL_SIGNED_IN_STATUS } from '../components/App/gql';
 import * as Sentry from '@sentry/browser';
 
@@ -23,7 +23,7 @@ describe('errorHandler', () => {
 
   it('updates local signed in status if called with a GQL authentication error', () => {
     const writeQueryMock = jest.fn();
-    jest.spyOn(cache, 'writeQuery').mockImplementation(writeQueryMock);
+    jest.spyOn(apolloMemCache, 'writeQuery').mockImplementation(writeQueryMock);
 
     const errorResponse: ErrorResponse = {
       graphQLErrors: [

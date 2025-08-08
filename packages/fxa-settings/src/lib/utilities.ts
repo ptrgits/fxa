@@ -115,6 +115,7 @@ export function isBase32Crockford(value: string) {
 }
 
 export function formatRecoveryKey(recoveryKeyBuffer: ArrayBufferLike) {
+  // @ts-ignore
   return base32Encode(recoveryKeyBuffer, 'Crockford').match(/.{4}/g)!.join(' ');
 }
 

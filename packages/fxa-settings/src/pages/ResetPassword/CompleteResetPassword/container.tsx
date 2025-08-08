@@ -27,12 +27,12 @@ import firefox from '../../../lib/channels/firefox';
 import { useState } from 'react';
 import { useNavigateWithQuery } from '../../../lib/hooks/useNavigateWithQuery';
 import { getLocalizedErrorMessage } from '../../../lib/error-utils';
-import { storeAccountData } from '../../../lib/storage-utils';
 import { SETTINGS_PATH } from '../../../constants';
 import { LocationState } from '../../Signin/interfaces';
 import { useFinishOAuthFlowHandler } from '../../../lib/oauth/hooks';
 import OAuthDataError from '../../../components/OAuthDataError';
 import { SensitiveData } from '../../../lib/sensitive-data-client';
+import { setCurrentAccount } from '../../../lib/cache';
 
 // This component is used for both /complete_reset_password and /account_recovery_reset_password routes
 // for easier maintenance
@@ -180,9 +180,8 @@ const CompleteResetPasswordContainer = ({
     };
 
     // TODO in FXA-9672: do not use Account model in reset password pages
-    const accountResetData = await account.resetPasswordWithRecoveryKey(
-      options
-    );
+    const accountResetData =
+      await account.resetPasswordWithRecoveryKey(options);
 
     return accountResetData;
   };
@@ -206,6 +205,7 @@ const CompleteResetPasswordContainer = ({
         undefined,
         includeRecoveryKeyPrompt
       );
+
     return accountResetData;
   };
 
@@ -216,7 +216,7 @@ const CompleteResetPasswordContainer = ({
       return;
     }
 
-    storeAccountData({
+    setCurrentAccount({
       uid: accountResetData.uid,
       email,
       lastLogin: Date.now(),

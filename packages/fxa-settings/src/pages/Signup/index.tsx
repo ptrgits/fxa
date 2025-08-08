@@ -22,7 +22,7 @@ import {
   settingsViewName,
   usePageViewEvent,
 } from '../../lib/metrics';
-import { StoredAccountData, storeAccountData } from '../../lib/storage-utils';
+import { StoredAccountData, setCurrentAccount } from '../../lib/cache';
 import { MozServices } from '../../lib/types';
 import {
   isOAuthIntegration,
@@ -165,7 +165,7 @@ export const Signup = ({
 
         // Persist account data to local storage to match parity with content-server
         // this allows the recent account to be used for /signin
-        storeAccountData(accountData);
+        setCurrentAccount(accountData);
 
         // Set these for use in ConfirmSignupCode
         sensitiveDataClient.setDataType(SensitiveData.Key.Auth, {

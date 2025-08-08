@@ -152,3 +152,18 @@ class Storage {
 }
 
 export default Storage;
+
+// Common Singletons
+const localStorage = Storage.factory('localStorage');
+const sessionStorage = Storage.factory('sessionStorage');
+export const store = {
+  get localStorage() {
+    return localStorage;
+  },
+  get sessionStorage() {
+    return sessionStorage;
+  },
+  get legacySessionStorage() {
+    return window.sessionStorage;
+  },
+};

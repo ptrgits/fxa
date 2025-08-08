@@ -11,7 +11,7 @@ import {
 } from '../../models';
 import { RouteComponentProps, useLocation } from '@reach/router';
 import InlineRecoveryKeySetup from '.';
-import { cache, currentAccount } from '../../lib/cache';
+import { apolloMemCache, getCurrentAccount } from '../../lib/cache';
 import { generateRecoveryKey } from 'fxa-auth-client/browser';
 import { CreateRecoveryKeyHandler } from './interfaces';
 import { SensitiveData } from '../../lib/sensitive-data-client';
@@ -28,7 +28,7 @@ const InlineRecoveryKeySetupContainer = ({
   const authClient = useAuthClient();
 
   const location = useLocation();
-  const storedLocalAccount = currentAccount();
+  const storedLocalAccount = getCurrentAccount();
   const email = storedLocalAccount?.email;
   const sessionToken = storedLocalAccount?.sessionToken;
   const uid = storedLocalAccount?.uid;
@@ -74,8 +74,8 @@ const InlineRecoveryKeySetupContainer = ({
             recoveryData
           );
 
-          cache.modify({
-            id: cache.identify({ __typename: 'Account' }),
+          apolloMemCache.modify({
+            id: apolloMemCache.identify({ __typename: 'Account' }),
             fields: {
               recoveryKey() {
                 return {
@@ -143,7 +143,7 @@ const InlineRecoveryKeySetupContainer = ({
         email,
         formattedRecoveryKey,
         navigateForward,
-        cmsInfo
+        cmsInfo,
       }}
     />
   );

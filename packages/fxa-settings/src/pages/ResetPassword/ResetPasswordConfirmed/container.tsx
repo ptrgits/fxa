@@ -21,7 +21,7 @@ import { AuthError } from '../../../lib/oauth';
 import { useState } from 'react';
 import GleanMetrics from '../../../lib/glean';
 import { SensitiveData } from '../../../lib/sensitive-data-client';
-import { currentAccount } from '../../../lib/cache';
+import { getCurrentAccount } from '../../../lib/cache';
 
 const ResetPasswordConfirmedContainer = ({
   integration,
@@ -38,7 +38,7 @@ const ResetPasswordConfirmedContainer = ({
   const navigateWithQuery = useNavigateWithQuery();
   const sensitiveDataClient = useSensitiveDataClient();
   const [errorMessage, setErrorMessage] = useState('');
-  const { uid, sessionToken, email, verified } = currentAccount() || {};
+  const { uid, sessionToken, email, verified } = getCurrentAccount() || {};
   const { keyFetchToken, unwrapBKey } =
     sensitiveDataClient.getDataType(SensitiveData.Key.AccountReset) || {};
 

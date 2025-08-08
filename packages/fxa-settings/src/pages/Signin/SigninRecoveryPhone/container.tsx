@@ -24,7 +24,7 @@ import {
 } from '../../../lib/oauth/hooks';
 import { SensitiveData } from '../../../lib/sensitive-data-client';
 import OAuthDataError from '../../../components/OAuthDataError';
-import { storeAccountData } from '../../../lib/storage-utils';
+import { setCurrentAccount } from '../../../lib/cache';
 import { useWebRedirect } from '../../../lib/hooks/useWebRedirect';
 import {
   SigninRecoveryPhoneContainerProps,
@@ -86,7 +86,7 @@ const SigninRecoveryPhoneContainer = ({
     }
 
     try {
-      storeAccountData({
+      setCurrentAccount({
         sessionToken: signinState.sessionToken,
         email: signinState.email,
         uid: signinState.uid,

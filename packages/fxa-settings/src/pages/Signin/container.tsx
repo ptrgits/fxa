@@ -25,10 +25,13 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import LoadingSpinner from 'fxa-react/components/LoadingSpinner';
 import {
-  cache,
-  currentAccount,
-  lastStoredAccount,
+  apolloMemCache,
+  getCurrentAccount,
+  findLastStoredAccount,
   findAccountByEmail,
+  StoredAccountData,
+  setCurrentAccount,
+  unsetCurrentAccount,
 } from '../../lib/cache';
 import { MutationFunction, useMutation, useQuery } from '@apollo/client';
 import {
@@ -75,7 +78,6 @@ import {
   isUnsupportedContext,
 } from '../../models/integrations/utils';
 import { GqlKeyStretchUpgrade } from '../../lib/gql-key-stretch-upgrade';
-import { setCurrentAccount, StoredAccountData } from '../../lib/storage-utils';
 import { cachedSignIn } from './utils';
 import OAuthDataError from '../../components/OAuthDataError';
 
@@ -105,23 +107,25 @@ function getAccountInfo(email?: string): {
     // currentAccount function is a bit twisty. This is just being a bit
     // paranoid about how that resolves and makes sure going forward a
     // currenAccount actually is set.
-    setCurrentAccount(targetAccount.uid);
+    setCurrentAccount(targetAccount);
     return {
       email: targetAccount.email,
       sessionToken: targetAccount.sessionToken,
       uid: targetAccount.uid,
     };
   };
+
   let targetAccount = undefined;
 
   // If an email is directly provided, use it! Try to find the matching
   // account in local storage and proceed with the account.
+
   if (email) {
     targetAccount = findAccountByEmail(email);
     if (targetAccount) {
       return apply(targetAccount);
     } else {
-      setCurrentAccount('');
+      unsetCurrentAccount();
       return { email };
     }
   }
@@ -129,14 +133,16 @@ function getAccountInfo(email?: string): {
   // If an email was not provided, then make a best effort to resolve
   // an account from local storage. Default to the currentAccount if available.
   // If not current account, then fallback to the last stored account.
-  targetAccount = currentAccount();
+
+  targetAccount = getCurrentAccount();
   if (targetAccount) {
     return apply(targetAccount);
   }
 
   // We still haven't found an account, so see if one was recently used. If so
   // pick that.
-  targetAccount = lastStoredAccount();
+
+  targetAccount = findLastStoredAccount();
   if (targetAccount) {
     return apply(targetAccount);
   }
@@ -243,6 +249,7 @@ const SigninContainer = ({
               await authClient.accountStatusByEmail(email, {
                 thirdPartyAuthStatus: true,
               });
+
             if (!exists) {
               const signUpPath = location.pathname.startsWith('/oauth')
                 ? '/oauth/signup'
@@ -395,8 +402,8 @@ const SigninContainer = ({
             result.data.signIn.sessionToken,
             email
           );
-          cache.modify({
-            id: cache.identify({ __typename: 'Account' }),
+          apolloMemCache.modify({
+            id: apolloMemCache.identify({ __typename: 'Account' }),
             fields: {
               recoveryKey() {
                 return {
@@ -457,7 +464,7 @@ const SigninContainer = ({
 
   const cachedSigninHandler: CachedSigninHandler = useCallback(
     async (sessionToken: hexstring) =>
-      cachedSignIn(sessionToken, authClient, cache, session),
+      cachedSignIn(sessionToken, authClient, apolloMemCache, session),
     [authClient, session]
   );
 

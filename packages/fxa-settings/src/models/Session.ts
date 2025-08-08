@@ -1,15 +1,11 @@
 import { ApolloClient, gql, NormalizedCacheObject } from '@apollo/client';
 import AuthClient from 'fxa-auth-client/browser';
-import {
-  sessionToken,
-  clearSignedInAccountUid,
-  currentAccount,
-} from '../lib/cache';
+import { clearSignedInAccountUid, getCurrentAccount } from '../lib/cache';
 import { GET_LOCAL_SIGNED_IN_STATUS } from '../components/App/gql';
+import * as Sentry from '@sentry/browser';
 
 export interface SessionData {
   verified: boolean | null;
-  token: string | null;
   verifySession?: (
     code: string,
     options: {
@@ -46,8 +42,9 @@ export const DESTROY_SESSION = gql`
 
 export class Session implements SessionData {
   private readonly authClient: AuthClient;
+
+  // TBD: Why isn't this a typed object! Or at least, NormalizedCacheObject...
   private readonly apolloClient: ApolloClient<object>;
-  private _loading: boolean;
 
   constructor(
     authClient: AuthClient,
@@ -55,38 +52,29 @@ export class Session implements SessionData {
   ) {
     this.authClient = authClient;
     this.apolloClient = apolloClient;
-    this._loading = false;
   }
 
-  private async withLoadingStatus<T>(promise: Promise<T>) {
-    this._loading = true;
-    try {
-      return await promise;
-    } catch (e) {
-      throw e;
-    } finally {
-      this._loading = false;
-    }
-  }
-
-  private get data() {
-    const { session } = this.apolloClient.cache.readQuery<{
+  private get data(): Session | null {
+    const result = this.apolloClient.cache.readQuery<{
       session: Session;
     }>({
       query: GET_SESSION_VERIFIED,
-    })!;
-    return session;
-  }
+    });
 
-  get token(): string {
-    return this.data.token;
+    if (result?.session) {
+      return result.session;
+    }
+
+    return null;
   }
 
   get verified(): boolean {
-    return this.data.verified;
+    if (this.data) {
+      return this.data.verified;
+    }
+    return false;
   }
 
-  // TODO: Use GQL verifyCode instead of authClient
   async verifySession(
     code: string,
     options: {
@@ -96,26 +84,46 @@ export class Session implements SessionData {
       newsletters?: string[];
     } = {}
   ) {
-    await this.withLoadingStatus(
-      this.authClient.sessionVerifyCode(sessionToken()!, code, options)
-    );
+    let success = false;
+    const token = getCurrentAccount()?.sessionToken;
+    if (token) {
+      try {
+        const result = await this.authClient.sessionVerifyCode(
+          token,
+          code,
+          options
+        );
+        success = true;
+      } catch (err) {
+        // Capture this for now, just so we can keep an eye on things
+        Sentry.captureException(err);
+      }
+    }
+
+    // TBD: Pretty sure we wanted to change this session.verified is true
     this.apolloClient.cache.modify({
       fields: {
         session: () => {
-          return true;
+          return {
+            verified: success,
+          };
         },
       },
     });
+
+    // TBD: Very unclear. Why are we setting this here? This action has to do with session.verify, not with isSigned!
+    // I'd think the user was already signed in if they got to this point.
     this.apolloClient.cache.writeQuery({
       query: GET_LOCAL_SIGNED_IN_STATUS,
-      data: { isSignedIn: true },
+      data: { isSignedIn: success },
     });
   }
 
   async sendVerificationCode() {
-    await this.withLoadingStatus(
-      this.authClient.sessionResendVerifyCode(sessionToken()!)
-    );
+    const token = getCurrentAccount()?.sessionToken;
+    if (token != undefined) {
+      await this.authClient.sessionResendVerifyCode(token);
+    }
   }
 
   async destroy() {
@@ -128,7 +136,7 @@ export class Session implements SessionData {
   }
 
   get isDestroyed() {
-    return currentAccount() == null;
+    return getCurrentAccount() == null;
   }
 
   async isSessionVerified() {

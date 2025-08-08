@@ -20,7 +20,7 @@ import GleanMetrics from '../../../lib/glean';
 import AppLayout from '../../../components/AppLayout';
 import { SigninRecoveryCodeProps } from './interfaces';
 import { AuthUiErrors } from '../../../lib/auth-errors/auth-errors';
-import { storeAccountData } from '../../../lib/storage-utils';
+import { setCurrentAccount } from '../../../lib/cache';
 import { handleNavigation } from '../utils';
 import { getLocalizedErrorMessage } from '../../../lib/error-utils';
 import { useWebRedirect } from '../../../lib/hooks/useWebRedirect';
@@ -143,7 +143,7 @@ const SigninRecoveryCode = ({
 
     if (response.data?.consumeRecoveryCode.remaining !== undefined) {
       GleanMetrics.loginBackupCode.success();
-      storeAccountData({
+      setCurrentAccount({
         sessionToken,
         email,
         uid,

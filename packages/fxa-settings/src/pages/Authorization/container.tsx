@@ -12,9 +12,15 @@ import {
   useAuthClient,
   useSession,
 } from '../../models';
-import { cache } from '../../lib/cache';
+import {
+  apolloMemCache,
+  getCurrentAccount,
+  MissingCachedAccount,
+  MissingCachedSessionError,
+  StoredAccountData,
+} from '../../lib/cache';
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { currentAccount } from '../../lib/cache';
+import {} from '../../lib/cache';
 import { useFinishOAuthFlowHandler } from '../../lib/oauth/hooks';
 import OAuthDataError from '../../components/OAuthDataError';
 import { cachedSignIn, handleNavigation } from '../Signin/utils';
@@ -26,15 +32,16 @@ import {
 import { AuthUiErrors } from '../../lib/auth-errors/auth-errors';
 import { hardNavigate } from 'fxa-react/lib/utils';
 import { useNavigateWithQuery } from '../../lib/hooks/useNavigateWithQuery';
+import AuthClient from 'fxa-auth-client/browser';
 
 const convertToRelierAccount = (
-  account: ReturnType<typeof currentAccount>,
-  authClient: ReturnType<typeof useAuthClient>
+  account: StoredAccountData,
+  authClient: AuthClient
 ) => {
   const relierAccount: RelierAccount = {
-    uid: account?.uid!,
-    email: account?.email!,
-    sessionToken: account?.sessionToken!,
+    uid: account.uid,
+    email: account.email,
+    sessionToken: account.sessionToken,
     verifyIdToken: authClient.verifyIdToken,
     isDefault: () => isDefault(account || {}),
   };
@@ -70,18 +77,28 @@ const AuthorizationContainer = ({
   const promptNoneHandler = useCallback(async () => {
     promptNoneCallCount.current += 1;
 
-    const account = currentAccount();
-    const relierAccount = convertToRelierAccount(account, authClient);
-
     try {
+      const account = getCurrentAccount();
+
+      // This shouldn't happen, but don't let things continue if we don't have an account set in the cache.
+      if (!account) {
+        throw new MissingCachedAccount();
+      }
+
+      const relierAccount = convertToRelierAccount(account, authClient);
+
       await (integration as OAuthWebIntegration).validatePromptNoneRequest(
         relierAccount
       );
 
+      if (!account.sessionToken) {
+        throw new OAuthError('PROMPT_NONE_NOT_SIGNED_IN');
+      }
+
       const { data, error } = await cachedSignIn(
-        account?.sessionToken!,
+        account.sessionToken,
         authClient,
-        cache,
+        apolloMemCache,
         session
       );
 
@@ -105,7 +122,7 @@ const AuthorizationContainer = ({
             verificationMethod: data.verificationMethod,
             verificationReason: data.verificationReason,
             uid: data.uid,
-            sessionToken: account?.sessionToken!,
+            sessionToken: account.sessionToken,
           },
           integration,
           redirectTo: integration.data.redirectTo,

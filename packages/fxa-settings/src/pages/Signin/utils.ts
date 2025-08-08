@@ -18,7 +18,11 @@ import {
 } from '../../models';
 import { navigate } from '@reach/router';
 import { hardNavigate } from 'fxa-react/lib/utils';
-import { currentAccount, discardSessionToken } from '../../lib/cache';
+import {
+  getCurrentAccount,
+  MissingCachedAccount,
+  setAccount,
+} from '../../lib/cache';
 import firefox from '../../lib/channels/firefox';
 import { AuthError, OAuthError } from '../../lib/oauth';
 import GleanMetrics from '../../lib/glean';
@@ -132,8 +136,10 @@ export const cachedSignIn = async (
       verified,
       sessionVerified,
       emailVerified,
-    }: RecoveryEmailStatusResponse =
-      await authClient.recoveryEmailStatus(sessionToken);
+    }: RecoveryEmailStatusResponse = await authClient.recoveryEmailStatus(
+      // TODO: It'd be better if we just didn't make a request in this state. We know it'll fail.
+      sessionToken
+    );
 
     let verificationMethod;
     let verificationReason;
@@ -157,15 +163,20 @@ export const cachedSignIn = async (
       }
     }
 
-    const storedLocalAccount = currentAccount();
+    const storedLocalAccount = getCurrentAccount();
+
+    // The account should exist since sign in was valid! If not, something is very wrong
+    // fail fast.
+    if (!storedLocalAccount) {
+      throw new MissingCachedAccount();
+    }
 
     return {
       data: {
         verificationMethod,
         verificationReason,
         verified,
-        // Because the cached signin was a success, we know 'uid' exists
-        uid: storedLocalAccount!.uid,
+        uid: storedLocalAccount.uid,
         sessionVerified, // might not need
         emailVerified, // might not need
       },
@@ -175,7 +186,11 @@ export const cachedSignIn = async (
     // the session token has expired
     const { errno } = error as AuthUiError;
     if (errno === AuthUiErrors.INVALID_TOKEN.errno) {
-      discardSessionToken();
+      const account = getCurrentAccount();
+      if (account) {
+        account.sessionToken = undefined;
+        setAccount(account);
+      }
       return { error: AuthUiErrors.SESSION_EXPIRED };
     }
     return { error };
@@ -201,12 +216,14 @@ export async function handleNavigation(navigationOptions: NavigationOptions) {
   // Check CMS fleature flags to determine if we should hide promos, the
   // default is to navigate to settings
   const cmsInfo = integration?.getCmsInfo();
-  if (cmsInfo?.shared?.featureFlags?.syncHidePromoAfterLogin && integration.isSync()) {
+  if (
+    cmsInfo?.shared?.featureFlags?.syncHidePromoAfterLogin &&
+    integration.isSync()
+  ) {
     navigationOptions.showInlineRecoveryKeySetup = false;
     navigationOptions.showSignupConfirmedSync = false;
     navigationOptions.syncHidePromoAfterLogin = true;
   }
-
 
   if (!navigationOptions.signinData.verified) {
     const { to, locationState } =
@@ -424,7 +441,7 @@ const getOAuthNavigationTarget = async (
         isSignInWithThirdPartyAuth:
           navigationOptions.isSignInWithThirdPartyAuth,
         showSignupConfirmedSync: navigationOptions.showSignupConfirmedSync,
-        syncHidePromoAfterLogin: navigationOptions.syncHidePromoAfterLogin
+        syncHidePromoAfterLogin: navigationOptions.syncHidePromoAfterLogin,
       }),
       locationState,
     };
@@ -458,7 +475,7 @@ const getOAuthNavigationTarget = async (
         isSignInWithThirdPartyAuth:
           navigationOptions.isSignInWithThirdPartyAuth,
         showSignupConfirmedSync: navigationOptions.showSignupConfirmedSync,
-        syncHidePromoAfterLogin: navigationOptions.syncHidePromoAfterLogin
+        syncHidePromoAfterLogin: navigationOptions.syncHidePromoAfterLogin,
       }),
       oauthData: {
         code,
@@ -491,7 +508,7 @@ export function getSigninState(
 // When SigninLocationState is not available from the router state,
 // this method can be used to check local storage
 function getStoredAccountInfo() {
-  const { email, sessionToken, uid, verified } = currentAccount() || {};
+  const { email, sessionToken, uid, verified } = getCurrentAccount() || {};
   if (email && sessionToken && uid && verified !== undefined) {
     return {
       email,

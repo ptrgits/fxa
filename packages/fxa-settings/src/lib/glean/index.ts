@@ -49,7 +49,7 @@ import * as utm from 'fxa-shared/metrics/glean/web/utm';
 import * as entrypointQuery from 'fxa-shared/metrics/glean/web/entrypoint';
 import { Integration } from '../../models';
 import { MetricsFlow } from '../metrics-flow';
-import { currentAccount } from '../../lib/cache';
+import { getCurrentAccount } from '../../lib/cache';
 
 type DeviceTypes = 'mobile' | 'tablet' | 'desktop';
 export type GleanMetricsContext = {
@@ -135,7 +135,7 @@ const getDeviceType: () => DeviceTypes | void = () => {
 const initMetrics = async () => {
   userId.set('');
   userIdSha256.set('');
-  const account = currentAccount();
+  const account = getCurrentAccount();
   try {
     if (account?.uid) {
       userId.set(account.uid);

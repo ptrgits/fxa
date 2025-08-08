@@ -6,7 +6,7 @@ import * as LoadingSpinnerModule from 'fxa-react/components/LoadingSpinner';
 import * as ConfirmSignupCodeModule from './index';
 import * as ModelsModule from '../../../models';
 import * as HooksModule from '../../../lib/oauth/hooks';
-import * as CacheModule from '../../../lib/cache';
+import * as AccountCacheModule from '../../../lib/cache/account-cache';
 import * as ApolloModule from '@apollo/client';
 import * as ReachRouterModule from '@reach/router';
 import * as SentryModule from 'fxa-shared/sentry/browser';
@@ -14,7 +14,7 @@ import * as ReactUtils from 'fxa-react/lib/utils';
 
 import { screen, waitFor } from '@testing-library/react';
 import AuthClient from 'fxa-auth-client/browser';
-import { StoredAccountData } from '../../../lib/storage-utils';
+import { StoredAccountData } from '../../../lib/cache/account-cache';
 import { renderWithLocalizationProvider } from 'fxa-react/lib/test-utils/localizationProvider';
 import SignupConfirmCodeContainer from './container';
 import { Integration } from '../../../models';
@@ -190,13 +190,15 @@ describe('confirm-signup-container', () => {
 
     it('renders as expected with account info in local storage', async () => {
       mockLocation(true, false);
-      jest.spyOn(CacheModule, 'currentAccount').mockImplementationOnce(() => {
-        return {
-          uid: MOCK_UID,
-          email: MOCK_EMAIL,
-          sessionToken: MOCK_SESSION_TOKEN,
-        } as StoredAccountData;
-      });
+      jest
+        .spyOn(AccountCacheModule, 'getCurrentAccount')
+        .mockImplementationOnce(() => {
+          return {
+            uid: MOCK_UID,
+            email: MOCK_EMAIL,
+            sessionToken: MOCK_SESSION_TOKEN,
+          } as StoredAccountData;
+        });
       render();
 
       await waitFor(() =>
@@ -255,9 +257,11 @@ describe('confirm-signup-container', () => {
   describe('renders-spinner', () => {
     it('has no account in location state or local storage', async () => {
       mockLocation(false, false);
-      jest.spyOn(CacheModule, 'currentAccount').mockImplementationOnce(() => {
-        return {} as StoredAccountData;
-      });
+      jest
+        .spyOn(AccountCacheModule, 'getCurrentAccount')
+        .mockImplementationOnce(() => {
+          return {} as StoredAccountData;
+        });
 
       render();
       await waitFor(() =>

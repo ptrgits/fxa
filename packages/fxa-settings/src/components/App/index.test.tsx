@@ -30,7 +30,7 @@ import { firefox } from '../../lib/channels/firefox';
 import GleanMetrics from '../../lib/glean';
 import config from '../../lib/config';
 import * as utils from 'fxa-react/lib/utils';
-import { currentAccount } from '../../lib/cache';
+import { getCurrentAccount } from '../../lib/cache/account-cache';
 import { MozServices } from '../../lib/types';
 import mockUseSyncEngines from '../../lib/hooks/useSyncEngines/mocks';
 import useSyncEngines from '../../lib/hooks/useSyncEngines';
@@ -59,9 +59,9 @@ jest.mock('../../lib/channels/firefox', () => ({
   },
 }));
 
-jest.mock('../../lib/cache', () => ({
-  ...jest.requireActual('../../lib/cache'),
-  currentAccount: jest.fn(),
+jest.mock('../../lib/cache/account-cache', () => ({
+  ...jest.requireActual('../../lib/cache/account-cache'),
+  getCurrentAccount: jest.fn(),
 }));
 
 jest.mock('../../models', () => ({
@@ -97,7 +97,9 @@ jest.mock('../../lib/glean', () => ({
   },
 }));
 
-const mockUseGeoEligibilityCheck = jest.fn().mockReturnValue({ eligible: false });
+const mockUseGeoEligibilityCheck = jest
+  .fn()
+  .mockReturnValue({ eligible: false });
 jest.mock('../../lib/hooks/useGeoEligibilityCheck', () => ({
   useGeoEligibilityCheck: () => mockUseGeoEligibilityCheck(),
 }));
@@ -275,7 +277,7 @@ describe('loading spinner states', () => {
     (useSession as jest.Mock).mockReturnValue({
       isValid: () => true,
     });
-    (currentAccount as jest.Mock).mockReturnValueOnce({
+    (getCurrentAccount as jest.Mock).mockReturnValueOnce({
       uid: 123,
       sessionToken: '123',
     });
@@ -427,7 +429,7 @@ describe('SettingsRoutes', () => {
 
   it('redirects to email-first if isSignedIn is false', async () => {
     (firefox.requestSignedInUser as jest.Mock).mockResolvedValue(null);
-    (currentAccount as jest.Mock).mockReturnValue(null);
+    (getCurrentAccount as jest.Mock).mockReturnValue(null);
     (useIntegration as jest.Mock).mockReturnValue({
       isSync: () => false,
       isDesktopRelay: () => false,

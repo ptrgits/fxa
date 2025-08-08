@@ -77,11 +77,6 @@ jest.mock('../../../lib/cache', () => ({
   currentAccount: () => MOCK_STORED_ACCOUNT,
 }));
 
-jest.mock('../../../lib/storage-utils', () => ({
-  ...jest.requireActual('../../../lib/storage-utils'),
-  persistAccount: jest.fn(),
-}));
-
 jest.spyOn(ReactUtils, 'hardNavigate').mockImplementation(() => {});
 
 let session: Session;

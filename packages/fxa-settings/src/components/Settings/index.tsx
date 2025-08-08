@@ -7,11 +7,7 @@ import * as Sentry from '@sentry/browser';
 import SettingsLayout from './SettingsLayout';
 import LoadingSpinner from 'fxa-react/components/LoadingSpinner';
 import AppErrorDialog from 'fxa-react/components/AppErrorDialog';
-import {
-  useAccount,
-  useInitialSettingsState,
-  useSession,
-} from '../../models';
+import { useAccount, useInitialSettingsState, useSession } from '../../models';
 import {
   Redirect,
   Router,
@@ -33,8 +29,11 @@ import { SETTINGS_PATH } from '../../constants';
 import PageAvatar from './PageAvatar';
 import PageRecentActivity from './PageRecentActivity';
 import PageRecoveryKeyCreate from './PageRecoveryKeyCreate';
-import { currentAccount } from '../../lib/cache';
-import { hasAccount, setCurrentAccount } from '../../lib/storage-utils';
+import {
+  findAccountByUid,
+  getCurrentAccount,
+  setCurrentAccount,
+} from '../../lib/cache';
 import GleanMetrics from '../../lib/glean';
 import Head from 'fxa-react/components/Head';
 import PageRecoveryPhoneRemove from './PageRecoveryPhoneRemove';
@@ -87,15 +86,16 @@ export const Settings = ({
       }
 
       // If the current account in local storage matches the account in the
-      // apollo cache, the state is syncrhonized and no action is required.
-      if (currentAccount()?.uid === accountUidFromApolloCache) {
+      // apollo cache, the state is synchronized and no action is required.
+      if (getCurrentAccount()?.uid === accountUidFromApolloCache) {
         return;
       }
 
       // If there is not a match, and the state exists in local storage, swap
       // the active account, so apollo cache and localstorage are in sync.
-      if (hasAccount(accountUidFromApolloCache)) {
-        setCurrentAccount(accountUidFromApolloCache);
+      const cachedApolloAccount = findAccountByUid(accountUidFromApolloCache);
+      if (cachedApolloAccount != null) {
+        setCurrentAccount(cachedApolloAccount);
         return;
       }
 

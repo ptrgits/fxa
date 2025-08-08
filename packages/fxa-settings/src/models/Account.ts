@@ -15,9 +15,14 @@ import AuthClient, {
 } from 'fxa-auth-client/browser';
 import { MetricsContext } from '@fxa/shared/glean';
 import {
-  currentAccount,
-  getStoredAccountData,
-  sessionToken,
+  getCurrentAccount,
+  setCurrentAccount,
+  StoredAccountData,
+  MissingCachedAccount,
+  MissingCachedSessionError,
+  setAccount,
+  findAccountByUid,
+  InvalidCachedAccountState,
 } from '../lib/cache';
 import firefox from '../lib/channels/firefox';
 import Storage from '../lib/storage';
@@ -36,6 +41,8 @@ import {
 } from '../lib/interfaces';
 import { createSaltV2 } from 'fxa-auth-client/lib/salt';
 import { getHandledError } from '../lib/error-utils';
+import { func } from 'prop-types';
+import { success } from 'fxa-shared/metrics/glean/web/thirdPartyAuthSetPassword';
 
 export interface DeviceLocation {
   city: string | null;
@@ -71,7 +78,7 @@ export interface RecoveryKeyBundlePayload {
 }
 
 // TODO: why doesn't this match fxa-graphql-api/src/lib/resolvers/types/attachedClient.ts?
-// DOUBLE TODO: The fact it doeesn't can cuase type safety issues. See FXA-10326
+// DOUBLE TODO: The fact it doesn't can cause type safety issues. See FXA-10326
 export interface AttachedClient {
   clientId: string;
   isCurrentSession: boolean;
@@ -590,7 +597,7 @@ export class Account implements AccountData {
         this.primaryEmail.email,
         oldPassword,
         newPassword,
-        sessionToken()!,
+        getCurrentSessionToken(),
         {
           keys: true,
         }
@@ -605,7 +612,15 @@ export class Account implements AccountData {
       response.keyFetchToken,
       response.unwrapBKey
     );
-    sessionToken(response.sessionToken);
+
+    const account = findAccountByUid(response.uid);
+    if (!account) {
+      throw new MissingCachedAccount();
+    }
+    account.sessionToken = response.sessionToken;
+    account.verified = response.verified;
+    setAccount(account);
+
     this.apolloClient.cache.writeQuery({
       query: gql`
         query UpdatePassword {
@@ -630,7 +645,7 @@ export class Account implements AccountData {
   async createPassword(newPassword: string) {
     const passwordCreatedResult = await this.withLoadingStatus(
       this.authClient.createPassword(
-        sessionToken()!,
+        getCurrentSessionToken(),
         this.primaryEmail.email,
         newPassword
       )
@@ -873,8 +888,15 @@ export class Account implements AccountData {
       });
       accountReset.unwrapBKey = credentials.unwrapBKey;
       accountReset.unwrapBKeyVersion2 = credentialsV2?.unwrapBKey;
-      currentAccount(getStoredAccountData(accountReset));
-      sessionToken(accountReset.sessionToken);
+
+      const account = findAccountByUid(accountReset.uid);
+      if (!account) {
+        throw new MissingCachedAccount();
+      }
+      account.verified = accountReset.verified;
+      account.sessionToken = accountReset.sessionToken;
+      setAccount(account);
+
       if (accountReset.verified) {
         this.apolloClient.cache.writeQuery({
           query: GET_LOCAL_SIGNED_IN_STATUS,
@@ -920,9 +942,13 @@ export class Account implements AccountData {
         variables: { input: { displayName } },
       })
     );
-    const legacyLocalStorageAccount = currentAccount()!;
-    legacyLocalStorageAccount.displayName = displayName;
-    currentAccount(legacyLocalStorageAccount);
+    const account = getCurrentAccount();
+    if (!account) {
+      throw new MissingCachedAccount();
+    }
+    account.displayName = displayName;
+    setAccount(account);
+
     firefox.profileChanged({ uid: this.uid });
   }
 
@@ -1022,8 +1048,8 @@ export class Account implements AccountData {
       )
     );
 
-    currentAccount(getStoredAccountData(linkedAccount));
-    sessionToken(linkedAccount.sessionToken);
+    const accountData = getStoredAccountData(linkedAccount);
+    setCurrentAccount(accountData);
 
     this.apolloClient.cache.writeQuery({
       query: GET_LOCAL_SIGNED_IN_STATUS,
@@ -1039,7 +1065,7 @@ export class Account implements AccountData {
   // Not currently in use but could be handy if we move towards removing the confirmation requirement
   async replaceRecoveryCodes() {
     return this.withLoadingStatus(
-      this.authClient.replaceRecoveryCodes(sessionToken()!)
+      this.authClient.replaceRecoveryCodes(getCurrentSessionToken())
     );
   }
 
@@ -1049,7 +1075,7 @@ export class Account implements AccountData {
   async hasTotpAuthClient() {
     try {
       const { verified } = await this.withLoadingStatus(
-        this.authClient.checkTotpTokenExists(sessionToken()!)
+        this.authClient.checkTotpTokenExists(getCurrentSessionToken())
       );
       return verified;
     } catch (e) {
@@ -1064,7 +1090,7 @@ export class Account implements AccountData {
    */
   async setRecoveryCodes(recoveryCodes: string[]) {
     const result = await this.withLoadingStatus(
-      this.authClient.setRecoveryCodes(sessionToken()!, recoveryCodes)
+      this.authClient.setRecoveryCodes(getCurrentSessionToken(), recoveryCodes)
     );
     await this.refresh('backupCodes');
     return result;
@@ -1076,7 +1102,10 @@ export class Account implements AccountData {
    */
   async updateRecoveryCodes(recoveryCodes: string[]) {
     const result = await this.withLoadingStatus(
-      this.authClient.updateRecoveryCodes(sessionToken()!, recoveryCodes)
+      this.authClient.updateRecoveryCodes(
+        getCurrentSessionToken(),
+        recoveryCodes
+      )
     );
     await this.refresh('backupCodes');
     return result;
@@ -1084,7 +1113,7 @@ export class Account implements AccountData {
 
   async createSecondaryEmail(email: string) {
     await this.withLoadingStatus(
-      this.authClient.recoveryEmailCreate(sessionToken()!, email, {
+      this.authClient.recoveryEmailCreate(getCurrentSessionToken(), email, {
         verificationMethod: 'email-otp',
       })
     );
@@ -1109,7 +1138,7 @@ export class Account implements AccountData {
   async verifySecondaryEmail(email: string, code: string) {
     await this.withLoadingStatus(
       this.authClient.recoveryEmailSecondaryVerifyCode(
-        sessionToken()!,
+        getCurrentSessionToken(),
         email,
         code
       )
@@ -1129,7 +1158,8 @@ export class Account implements AccountData {
 
   async disableTwoStepAuth() {
     await this.withLoadingStatus(
-      this.authClient.deleteTotpToken(sessionToken()!)
+      // TODO: Don't make call if account or session token is missing
+      this.authClient.deleteTotpToken(getCurrentSessionToken())
     );
 
     const cache = this.apolloClient.cache;
@@ -1147,7 +1177,7 @@ export class Account implements AccountData {
 
   async deleteRecoveryKey() {
     await this.withLoadingStatus(
-      this.authClient.deleteRecoveryKey(sessionToken()!)
+      this.authClient.deleteRecoveryKey(getCurrentSessionToken())
     );
     const cache = this.apolloClient.cache;
     cache.modify({
@@ -1165,7 +1195,7 @@ export class Account implements AccountData {
 
   async deleteSecondaryEmail(email: string) {
     await this.withLoadingStatus(
-      this.authClient.recoveryEmailDestroy(sessionToken()!, email)
+      this.authClient.recoveryEmailDestroy(getCurrentSessionToken(), email)
     );
     const cache = this.apolloClient.cache;
     cache.modify({
@@ -1185,7 +1215,10 @@ export class Account implements AccountData {
 
   async makeEmailPrimary(email: string) {
     await this.withLoadingStatus(
-      this.authClient.recoveryEmailSetPrimaryEmail(sessionToken()!, email)
+      this.authClient.recoveryEmailSetPrimaryEmail(
+        getCurrentSessionToken(),
+        email
+      )
     );
     const cache = this.apolloClient.cache;
     cache.modify({
@@ -1213,23 +1246,27 @@ export class Account implements AccountData {
       },
     });
 
-    const legacyLocalStorageAccount = currentAccount()!;
-    legacyLocalStorageAccount.email = email;
-    currentAccount(legacyLocalStorageAccount);
-
+    const account = getCurrentAccount();
+    if (account) {
+      account.email = email;
+      setCurrentAccount(account);
+    }
     firefox.profileChanged({ uid: this.uid });
   }
 
   async resendEmailCode(email: string) {
     return this.withLoadingStatus(
-      this.authClient.recoveryEmailSecondaryResendCode(sessionToken()!, email)
+      this.authClient.recoveryEmailSecondaryResendCode(
+        getCurrentSessionToken(),
+        email
+      )
     );
   }
 
   async createTotp(skipRecoveryCodes = false) {
     const opts = skipRecoveryCodes ? { skipRecoveryCodes } : {};
     const totp = await this.withLoadingStatus(
-      this.authClient.createTotpToken(sessionToken()!, opts)
+      this.authClient.createTotpToken(getCurrentSessionToken(), opts)
     );
     const cache = this.apolloClient.cache;
     cache.modify({
@@ -1246,7 +1283,7 @@ export class Account implements AccountData {
   async verifyTotp(code: string) {
     try {
       await this.withLoadingStatus(
-        this.authClient.verifyTotpCode(sessionToken()!, code)
+        this.authClient.verifyTotpCode(getCurrentSessionToken(), code)
       );
       // We must requery for this because this endpoint checks
       // for if recovery codes exist
@@ -1270,10 +1307,14 @@ export class Account implements AccountData {
 
   async uploadAvatar(file: Blob) {
     const { access_token } = await this.withLoadingStatus(
-      this.authClient.createOAuthToken(sessionToken()!, config.oauth.clientId, {
-        scope: 'profile:write clients:write',
-        ttl: 300,
-      })
+      this.authClient.createOAuthToken(
+        getCurrentSessionToken(),
+        config.oauth.clientId,
+        {
+          scope: 'profile:write clients:write',
+          ttl: 300,
+        }
+      )
     );
     const response = await this.withLoadingStatus(
       fetch(`${config.servers.profile.url}/v1/avatar/upload`, {
@@ -1304,7 +1345,7 @@ export class Account implements AccountData {
   async createRecoveryKey(password: string, replaceKey: boolean = false) {
     const reauth = await this.withLoadingStatus(
       this.authClient.sessionReauth(
-        sessionToken()!,
+        getCurrentSessionToken(),
         this.primaryEmail.email,
         password,
         {
@@ -1320,7 +1361,7 @@ export class Account implements AccountData {
       await generateRecoveryKey(this.uid, keys);
     await this.withLoadingStatus(
       this.authClient.createRecoveryKey(
-        sessionToken()!,
+        getCurrentSessionToken(),
         recoveryKeyId,
         recoveryData,
         true,
@@ -1344,7 +1385,7 @@ export class Account implements AccountData {
 
   async updateRecoveryKeyHint(hint: string) {
     await this.withLoadingStatus(
-      this.authClient.updateRecoveryKeyHint(sessionToken()!, hint)
+      this.authClient.updateRecoveryKeyHint(getCurrentSessionToken(), hint)
     );
   }
 
@@ -1371,15 +1412,17 @@ export class Account implements AccountData {
         variables: { input: { state } },
       })
     );
-    const legacyLocalStorageAccount = currentAccount()!;
-    legacyLocalStorageAccount.metricsEnabled = state === 'in';
-    currentAccount(legacyLocalStorageAccount);
+    const account = getCurrentAccount();
+    if (account) {
+      account.metricsEnabled = state === 'in';
+      setAccount(account);
+    }
     firefox.profileChanged({ metricsEnabled: this.metricsEnabled });
   }
 
   async unlinkThirdParty(providerId: number) {
     await this.withLoadingStatus(
-      this.authClient.unlinkThirdParty(sessionToken()!, providerId)
+      this.authClient.unlinkThirdParty(getCurrentSessionToken(), providerId)
     );
 
     const cache = this.apolloClient.cache;
@@ -1401,7 +1444,7 @@ export class Account implements AccountData {
         this.primaryEmail.email,
         password,
         {},
-        sessionToken()!
+        getCurrentSessionToken()
       )
     );
     firefox.accountDeleted(this.uid);
@@ -1428,8 +1471,10 @@ export class Account implements AccountData {
         isFirefoxMobileClient: opts.isFirefoxMobileClient,
       }
     );
-    currentAccount(currentAccount(getStoredAccountData(data)));
-    sessionToken(data.sessionToken);
+
+    const accountData = getStoredAccountData(data);
+    setCurrentAccount(accountData);
+
     const cache = this.apolloClient.cache;
     cache.modify({
       id: cache.identify({ __typename: 'Account' }),
@@ -1451,21 +1496,21 @@ export class Account implements AccountData {
 
   async removeRecoveryPhone() {
     const result = await this.withLoadingStatus(
-      this.authClient.recoveryPhoneDelete(sessionToken()!)
+      this.authClient.recoveryPhoneDelete(getCurrentSessionToken())
     );
     return result;
   }
 
   async addRecoveryPhone(phoneNumber: string) {
     const result = await this.withLoadingStatus(
-      this.authClient.recoveryPhoneCreate(sessionToken()!, phoneNumber)
+      this.authClient.recoveryPhoneCreate(getCurrentSessionToken(), phoneNumber)
     );
     return result;
   }
 
   async changeRecoveryPhone(code: string) {
     const result = await this.withLoadingStatus(
-      this.authClient.recoveryPhoneChange(sessionToken()!, code)
+      this.authClient.recoveryPhoneChange(getCurrentSessionToken(), code)
     );
     return result;
   }
@@ -1477,7 +1522,7 @@ export class Account implements AccountData {
   ) {
     const { nationalFormat } = await this.withLoadingStatus(
       this.authClient.recoveryPhoneConfirmSetup(
-        sessionToken()!,
+        getCurrentSessionToken(),
         code,
         isInitial2faSetup
       )
@@ -1497,4 +1542,47 @@ export class Account implements AccountData {
       },
     });
   }
+}
+
+/**
+ * Get's the current session token from the 'current' account
+ * held in local storage.
+ * @returns
+ * @throws MissingCachedAccount - If the current account is null.
+ * @throws InvalidCachedAccountState - If the current count is found, but it does not have a session token set.
+ */
+function getCurrentSessionToken(): string {
+  const account = getCurrentAccount();
+  if (!account) {
+    throw new MissingCachedAccount();
+  } else if (!account.sessionToken) {
+    throw new InvalidCachedAccountState('Missing session token');
+  }
+  return account.sessionToken;
+}
+
+// TODO in FXA-8454
+// Add checks to ensure this function cannot produce an object that would violate type safety.
+// Currently, there are no checks to ensure that the values are defined and non-null,
+// which could result in errors at runtime.
+export function getStoredAccountData({
+  uid,
+  sessionToken,
+  alertText,
+  displayName,
+  metricsEnabled,
+  lastLogin,
+  email,
+  verified,
+}: Record<string, any>): StoredAccountData {
+  return {
+    uid,
+    sessionToken,
+    alertText,
+    displayName,
+    metricsEnabled,
+    lastLogin,
+    email,
+    verified,
+  };
 }

@@ -27,7 +27,10 @@ import {
 } from '../mocks';
 import { MozServices } from '../../lib/types';
 import * as utils from 'fxa-react/lib/utils';
-import { storeAccountData } from '../../lib/storage-utils';
+import {
+  setCurrentAccount,
+  getCurrentAccount,
+} from '../../lib/cache/account-cache';
 import VerificationMethods from '../../constants/verification-methods';
 import VerificationReasons from '../../constants/verification-reasons';
 import { SigninProps } from './interfaces';
@@ -84,8 +87,9 @@ jest.mock('../../lib/glean', () => ({
     },
   },
 }));
-jest.mock('../../lib/storage-utils', () => ({
-  storeAccountData: jest.fn(),
+jest.mock('../../lib/cache/account-cache', () => ({
+  setCurrentAccount: jest.fn(),
+  getCurrentAccount: jest.fn(),
 }));
 
 const mockSetData = jest.fn();
@@ -357,7 +361,8 @@ describe('Signin component', () => {
             });
             expect(GleanMetrics.login.submit).toHaveBeenCalledTimes(1);
             expect(GleanMetrics.login.success).toHaveBeenCalledTimes(1);
-            expect(storeAccountData).toHaveBeenCalled();
+            expect(setCurrentAccount).toHaveBeenCalled();
+            expect(getCurrentAccount).not.toHaveBeenCalled();
           });
 
           it('navigates to /signin_totp_code when TOTP verification requested', async () => {
